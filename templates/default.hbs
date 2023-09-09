@@ -1,0 +1,12 @@
+🏃 {{ start_time }} 🏃
+{{ distance }} km
+{{ duration_in_min }} min.
+{{ duration_per_km }} min./km
+{{ calories }} kcal
+heart rate:
+  avg: {{ heart_rate_average }} bpm
+  max: {{ heart_rate_max }} bpm
+{{#each heart_rate_zone_min_pairs as |pair|}}
+  {{{ pair.0 }}}: {{ pad_left pair.1 2 }} min.
+{{/each}}
+#running #fitbit
