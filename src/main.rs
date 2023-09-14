@@ -1,10 +1,10 @@
 use chrono::NaiveDate;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use dotenvy::{dotenv, var};
 use reqwest::Result;
 
 mod domain;
-use domain::{fitbit, mastodon, view};
+use domain::{fitbit, mastodon, misskey, view};
 
 struct AppConfig {
     fitbit_api_url: String,
@@ -12,6 +12,14 @@ struct AppConfig {
     fitbit_client_secret: String,
     mastodon_api_url: String,
     mastodon_access_token: String,
+    misskey_api_url: String,
+    misskey_access_token: String,
+}
+
+#[derive(Clone, ValueEnum, Debug)]
+enum Platform {
+    Mastodon,
+    Misskey,
 }
 
 #[derive(Parser, Debug)]
@@ -20,6 +28,10 @@ struct CliArgs {
     /// Date to fetch (from)
     #[arg(short, long)]
     since: String,
+
+    /// Platform name to post the report
+    #[arg(value_enum, default_value_t = crate::Platform::Misskey)]
+    platform: Platform,
 
     /// is preview mode ON
     #[arg(long, default_value_t = false)]
@@ -36,7 +48,10 @@ impl AppConfig {
             var("FITBIT_CLIENT_SECRET").expect("Failed to get FITBIT_CLIENT_SECRET.");
         let mastodon_api_url = var("MASTODON_API_URL").expect("Failed to get MASTODON_API_URL.");
         let mastodon_access_token =
-            var("MASTODON_ACCESS_TOKEN").expect("Faild to get MASTODON_ACCESS_TOKEN.");
+            var("MASTODON_ACCESS_TOKEN").expect("Failed to get MASTODON_ACCESS_TOKEN.");
+        let misskey_api_url = var("MISSKEY_API_URL").expect("Failed to get MISSKEY_API_URL.");
+        let misskey_access_token =
+            var("MISSKEY_ACCESS_TOKEN").expect("Failed to get MISSKEY_ACCESS_TOKEN.");
 
         Self {
             fitbit_api_url,
@@ -44,6 +59,8 @@ impl AppConfig {
             fitbit_client_secret,
             mastodon_api_url,
             mastodon_access_token,
+            misskey_api_url,
+            misskey_access_token,
         }
     }
 }
@@ -78,10 +95,6 @@ async fn run<'a>(ctx: &'a AppContext<'a>) -> Result<()> {
         return Ok(());
     }
 
-    let mastodon_api_config = mastodon::MastodonApiConfig {
-        base_url: ctx.config.mastodon_api_url.to_owned(),
-        token: ctx.config.mastodon_access_token.to_owned(),
-    };
     let text = view::get(run.unwrap());
 
     if text.is_err() {
@@ -93,9 +106,29 @@ async fn run<'a>(ctx: &'a AppContext<'a>) -> Result<()> {
         println!("==== PREVIEW MODE ====");
         println!("{}", text.unwrap());
     } else {
-        mastodon::toot(&mastodon_api_config, &text.unwrap()).await?;
+        post_report(&ctx.arguments.platform, &ctx.config, text.unwrap()).await?;
     }
 
+    Ok(())
+}
+
+async fn post_report(platform: &Platform, config: &AppConfig, text: String) -> Result<()> {
+    match platform {
+        Platform::Mastodon => {
+            let mastodon_api_config = mastodon::MastodonApiConfig {
+                base_url: config.mastodon_api_url.to_owned(),
+                token: config.mastodon_access_token.to_owned(),
+            };
+            mastodon::post(&mastodon_api_config, &text).await?;
+        }
+        Platform::Misskey => {
+            let misskey_api_config = misskey::MisskeyApiConfig {
+                base_url: config.misskey_api_url.to_owned(),
+                token: config.misskey_access_token.to_owned(),
+            };
+            misskey::post(&misskey_api_config, &text).await?;
+        }
+    }
     Ok(())
 }
 

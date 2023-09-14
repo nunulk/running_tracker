@@ -6,7 +6,7 @@ pub struct MastodonApiConfig {
     pub token: String,
 }
 
-pub async fn toot(config: &MastodonApiConfig, text: &String) -> Result<()> {
+pub async fn post(config: &MastodonApiConfig, text: &String) -> Result<()> {
     let url = format!("{}/statuses", config.base_url);
     let req_form = [("status", text)];
     let res = Client::new()
@@ -20,7 +20,7 @@ pub async fn toot(config: &MastodonApiConfig, text: &String) -> Result<()> {
         .await?;
 
     if !res.status().is_success() {
-        panic!("Toot failed.");
+        panic!("Post failed.");
     }
 
     Ok(())
