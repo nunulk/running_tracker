@@ -154,11 +154,14 @@ impl FitbitApi {
             let content = activity::collect_summary(&xml);
             if content.is_none() {
                 println!("Failed to parse activity log: {}", activity.logId);
-                return Ok(Some(ActivityOutput::new(&activity, &activity::HeartRateSummary {
-                    average: 0,
-                    max: 0,
-                    details: vec![],
-                })));
+                return Ok(Some(ActivityOutput::new(
+                    &activity,
+                    &activity::HeartRateSummary {
+                        average: 0,
+                        max: 0,
+                        details: vec![],
+                    },
+                )));
             }
             Ok(Some(ActivityOutput::new(&activity, &content.unwrap())))
         } else {
@@ -328,17 +331,15 @@ mod activity {
     pub fn collect_summary(content: &String) -> Option<HeartRateSummary> {
         let database: TrainingCenterDatabase =
             quick_xml::de::from_str(&content).expect("Failed to parse XML.");
-        let lap = &database
-        .activities
-        .activity
-        .get(0)
-        .unwrap()
-        .lap;
+        let lap = &database.activities.activity.get(0).unwrap().lap;
         if lap.is_none() {
             return None;
         }
-        let heart_rates = lap.as_ref().unwrap()
-            .track.trackpoint
+        let heart_rates = lap
+            .as_ref()
+            .unwrap()
+            .track
+            .trackpoint
             .iter()
             .map(|p| p.heart_rate_bpm.value)
             .collect::<Vec<u32>>();

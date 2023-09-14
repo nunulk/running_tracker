@@ -50,7 +50,7 @@ impl AppConfig {
 
 struct AppContext<'a> {
     config: &'a AppConfig,
-    arguments: &'a CliArgs
+    arguments: &'a CliArgs,
 }
 
 async fn run<'a>(ctx: &'a AppContext<'a>) -> Result<()> {
@@ -103,7 +103,10 @@ async fn run<'a>(ctx: &'a AppContext<'a>) -> Result<()> {
 async fn main() -> Result<()> {
     let config = AppConfig::load();
     let arguments = CliArgs::parse();
-    let ctx = AppContext { config: &config, arguments: &arguments };
+    let ctx = AppContext {
+        config: &config,
+        arguments: &arguments,
+    };
 
     run(&ctx).await
 }
