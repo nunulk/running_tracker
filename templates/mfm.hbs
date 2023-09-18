@@ -1,0 +1,21 @@
+<center>🏃 {{ start_time }} 🏃</center>
+
+```js
+{
+  "distance": {{ distance }},
+  "duration": {{ duration_in_min }},
+  "pace": {{ duration_per_km }},
+  "calorie": {{ calories }},
+  "heart rate": {
+    "avg": {{ heart_rate_average }},
+    "max": {{ heart_rate_max }},
+    "distribution": {
+{{#each heart_rate_zone_min_pairs as |pair|}}
+      "{{{ pair.0 }}}": {{ pair.1 }}{{#unless @last}},{{/unless}}
+{{/each}}
+    }
+  }
+}
+```
+
+#running #fitbit

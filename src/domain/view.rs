@@ -66,12 +66,18 @@ fn pad_left_helper(
     Ok(())
 }
 
-pub fn get(output: fitbit::ActivityOutput) -> Result<String, Box<dyn Error>> {
+pub fn get(
+    output: fitbit::ActivityOutput,
+    template_name: &String,
+) -> Result<String, Box<dyn Error>> {
     if output.distance.is_none() {
         return Ok(String::new());
     }
     let mut handlebars = Handlebars::new();
-    handlebars.register_template_file("template", format!("{}/default.hbs", TEMPLATE_PATH))?;
+    handlebars.register_template_file(
+        "template",
+        format!("{}/{}.hbs", TEMPLATE_PATH, template_name),
+    )?;
     handlebars.register_helper("pad_left", Box::new(pad_left_helper));
     let view_model = ActivityViewModel::from_output(output);
     let view = handlebars.render("template", &view_model)?;

@@ -33,6 +33,10 @@ struct CliArgs {
     #[arg(value_enum, default_value_t = crate::Platform::Misskey)]
     platform: Platform,
 
+    /// template name (default: default)
+    #[arg(short, long, default_value = "default")]
+    template: String,
+
     /// is preview mode ON
     #[arg(long, default_value_t = false)]
     preview: bool,
@@ -95,7 +99,7 @@ async fn run<'a>(ctx: &'a AppContext<'a>) -> Result<()> {
         return Ok(());
     }
 
-    let text = view::get(run.unwrap());
+    let text = view::get(run.unwrap(), &ctx.arguments.template);
 
     if text.is_err() {
         println!("Failed to create text. {}", text.err().unwrap());
