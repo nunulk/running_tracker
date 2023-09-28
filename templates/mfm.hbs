@@ -5,6 +5,11 @@
   "distance": {{ distance }},
   "duration": {{ duration_in_min }},
   "pace": {{ duration_per_km }},
+  "split": [
+  {{#each split_times as |s|}}
+    "{{ s }}"{{#unless @last}},{{/unless}}
+  {{/each}}
+  ],
   "calorie": {{ calories }},
   "heart rate": {
     "avg": {{ heart_rate_average }},

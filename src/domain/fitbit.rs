@@ -39,6 +39,7 @@ pub struct ActivityOutput {
     pub start_time: String,
     pub distance: Option<f32>,
     pub duration: u32,
+    pub split_times: Vec<String>,
     pub calories: u32,
     pub heart_rate_average: u32,
     pub heart_rate_max: u32,
@@ -76,15 +77,29 @@ impl AuthorizationTokens {
 }
 
 impl ActivityOutput {
-    fn new(activity: &Activity, heart_rate_summary: &activity::HeartRateSummary) -> Self {
+    fn new(
+        activity: &Activity,
+        running_activity_summary: &activity::RunningActivitySummary,
+    ) -> Self {
+        let format_split_time = |seconds: &u32| -> String {
+            let minutes = seconds / 60;
+            let remaining_seconds = seconds % 60;
+            format!("{}m{}s", minutes, remaining_seconds)
+        };
+
         Self {
             start_time: activity.startTime.clone(),
             distance: activity.distance,
             duration: activity.duration,
+            split_times: running_activity_summary
+                .split_time_summary
+                .iter()
+                .map(|n| format_split_time(n))
+                .collect::<Vec<String>>(),
             calories: activity.calories,
-            heart_rate_average: heart_rate_summary.average,
-            heart_rate_max: heart_rate_summary.max,
-            heart_rate_details: heart_rate_summary.details.clone(),
+            heart_rate_average: running_activity_summary.heart_rate_summary.average,
+            heart_rate_max: running_activity_summary.heart_rate_summary.max,
+            heart_rate_details: running_activity_summary.heart_rate_summary.details.clone(),
         }
     }
 }
@@ -151,19 +166,9 @@ impl FitbitApi {
             let xml = self
                 .fetch_activity_log(&activity.logId.to_string(), token)
                 .await?;
-            let content = activity::collect_summary(&xml);
-            if content.is_none() {
-                println!("Failed to parse activity log: {}", activity.logId);
-                return Ok(Some(ActivityOutput::new(
-                    &activity,
-                    &activity::HeartRateSummary {
-                        average: 0,
-                        max: 0,
-                        details: vec![],
-                    },
-                )));
-            }
-            Ok(Some(ActivityOutput::new(&activity, &content.unwrap())))
+            let content = activity::collect_summary(&xml).expect("Failed to parse activity log");
+
+            Ok(Some(ActivityOutput::new(&activity, &content)))
         } else {
             Ok(None)
         }
@@ -288,6 +293,7 @@ mod activity {
     #[serde(rename_all = "PascalCase")]
     struct Trackpoint {
         heart_rate_bpm: HeartRateBpm,
+        distance_meters: f64,
     }
 
     #[derive(Serialize, Deserialize, Debug)]
@@ -328,21 +334,59 @@ mod activity {
         pub details: Vec<(String, u32)>,
     }
 
-    pub fn collect_summary(content: &String) -> Option<HeartRateSummary> {
+    pub struct RunningActivitySummary {
+        pub split_time_summary: Vec<u32>,
+        pub heart_rate_summary: HeartRateSummary,
+    }
+
+    pub fn collect_summary(content: &String) -> Option<RunningActivitySummary> {
         let database: TrainingCenterDatabase =
             quick_xml::de::from_str(&content).expect("Failed to parse XML.");
         let lap = &database.activities.activity.get(0).unwrap().lap;
         if lap.is_none() {
             return None;
         }
-        let heart_rates = lap
-            .as_ref()
-            .unwrap()
-            .track
-            .trackpoint
+
+        let trackpoint = &lap.as_ref().unwrap().track.trackpoint;
+
+        let distance_meters = trackpoint
+            .iter()
+            .map(|p| p.distance_meters)
+            .collect::<Vec<f64>>();
+        let split_time_summary = create_split_time_summary(distance_meters);
+
+        let heart_rates = trackpoint
             .iter()
             .map(|p| p.heart_rate_bpm.value)
             .collect::<Vec<u32>>();
+        let heart_rate_summary = create_heart_rate_summary(heart_rates);
+
+        Some(RunningActivitySummary {
+            split_time_summary,
+            heart_rate_summary,
+        })
+    }
+
+    fn create_split_time_summary(distance_meters: Vec<f64>) -> Vec<u32> {
+        let mut split_seconds: Vec<u32> = vec![];
+        let mut i = 0;
+        for (n, d) in distance_meters.iter().enumerate() {
+            // API document does not specify records that have the DistanceMeter contains 1000 always exist.
+            // fix the below expression if it does not always fulfill the condition.
+            if *d != 0.0 && d % 1000.0 == 0.0 {
+                let prev_split = if i == 0 {
+                    0u32
+                } else {
+                    split_seconds.iter().sum::<u32>()
+                };
+                split_seconds.push(n as u32 - prev_split);
+                i += 1;
+            }
+        }
+        split_seconds
+    }
+
+    fn create_heart_rate_summary(heart_rates: Vec<u32>) -> HeartRateSummary {
         let average = (heart_rates.iter().sum::<u32>() as f32 / heart_rates.len() as f32) as u32;
         let max = *heart_rates.iter().max().unwrap();
         let mut details: Vec<(String, u32)> = Vec::new();
@@ -362,11 +406,11 @@ mod activity {
                 None => details.push((range, 1)),
             };
         }
-        return Some(HeartRateSummary {
+        HeartRateSummary {
             average,
             max,
             details,
-        });
+        }
     }
 }
 
@@ -390,20 +434,22 @@ mod test {
             read_to_string(path).expect(format!("Failed to read from file: {}", path).as_str());
         let summary = activity::collect_summary(&content);
         assert!(summary.is_some());
-        let summary = summary.unwrap();
-        assert_eq!(summary.average, 131);
-        assert_eq!(summary.max, 166);
+        let heart_rate_summary = &summary.as_ref().unwrap().heart_rate_summary;
+        assert_eq!(heart_rate_summary.average, 131);
+        assert_eq!(heart_rate_summary.max, 166);
         assert_eq!(
-            summary.details.get(0).unwrap(),
+            heart_rate_summary.details.get(0).unwrap(),
             &("<115".to_owned(), 265u32)
         );
         assert_eq!(
-            summary.details.get(1).unwrap(),
+            heart_rate_summary.details.get(1).unwrap(),
             &("-150".to_owned(), 1802u32)
         );
         assert_eq!(
-            summary.details.get(2).unwrap(),
+            heart_rate_summary.details.get(2).unwrap(),
             &(">150".to_owned(), 418u32)
         );
+        let split_summary = &summary.as_ref().unwrap().split_time_summary;
+        assert_ne!(split_summary.len(), 0);
     }
 }

@@ -2,6 +2,10 @@
 {{ distance }} km
 {{ duration_in_min }} min.
 {{ duration_per_km }} min./km
+split:
+{{#each split_times as |s|}}
+  {{ s }}
+{{/each}}
 {{ calories }} kcal
 heart rate:
   avg: {{ heart_rate_average }} bpm
